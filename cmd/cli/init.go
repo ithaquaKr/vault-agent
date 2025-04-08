@@ -7,6 +7,7 @@ import (
 
 	vaultClient "github.com/hashicorp/vault-client-go"
 	customVault "github.com/ithaquaKr/vault-agent/internal/vault"
+	"github.com/ithaquaKr/vault-agent/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -27,14 +28,13 @@ It will not unseal the Vault instance after initializing.`,
 		if err != nil {
 			slog.Error(fmt.Sprintf("error connecting to Vault: %s", err.Error()))
 		}
-		config := customVault.Config{
-			Init: customVault.InitConfig{
-				KeyShares: 5,
-				Threshold: 3,
-			},
+		config, err := config.LoadConfig("../../", "config.yaml")
+		if err != nil {
+			slog.Error(fmt.Sprintf("can load configuration: %s", err))
 		}
+		fmt.Println(config.VaultConfig)
 
-		v, err := customVault.New(client, config)
+		v, err := customVault.New(client, config.VaultConfig, ctx)
 		if err != nil {
 			slog.Error(fmt.Sprintf("error creating Vault connect: %s", err.Error()))
 		}

@@ -11,23 +11,23 @@ import (
 )
 
 type InitConfig struct {
-	KeyShares int32
-	Threshold int32
+	KeyShares int32 `mapstructure:"keyShares"`
+	Threshold int32 `mapstructure:"threshold"`
 }
 
-type Config struct {
-	Init     InitConfig `mapstructure:"InitConfig"`
+type VaultConfig struct {
+	Init     InitConfig `mapstructure:"initConfig"`
 	Policies []policy   `mapstructure:"policies"`
 }
 
 type vaultServer struct {
 	ctx    context.Context
 	cl     *vaultClient.Client
-	config *Config
+	config *VaultConfig
 }
 
 // New returns a new implement of Operator interface, or an error
-func New(cl *vaultClient.Client, config Config, ctx context.Context) (*vaultServer, error) {
+func New(cl *vaultClient.Client, config VaultConfig, ctx context.Context) (*vaultServer, error) {
 	return &vaultServer{
 		cl:     cl,
 		config: &config,

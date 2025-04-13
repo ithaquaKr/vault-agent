@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -18,8 +17,6 @@ var rootCmd = &cobra.Command{
 	Short: "Sync configurations, secrets of Hashicorp Vault",
 	Long:  "This is a tool to help setup, management of Hashicorp Vault.",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		ctx := context.Background()
-		cmd.SetContext(ctx)
 	},
 }
 

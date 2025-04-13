@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"os"
 
-	vaultClient "github.com/hashicorp/vault-client-go"
-	customVault "github.com/ithaquaKr/vault-agent/internal/vault"
+	"github.com/ithaquaKr/vault-agent/client"
+	vaultController "github.com/ithaquaKr/vault-agent/internal/vault"
 	"github.com/ithaquaKr/vault-agent/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -19,12 +19,9 @@ run "vault init" against the target Vault instance, before encrypting and
 storing the keys in the given backend.
 
 It will not unseal the Vault instance after initializing.`,
-	Run: func(cmd *cobra.Command, _ []string) {
-		ctx := cmd.Context()
+	Run: func(_ *cobra.Command, _ []string) {
 		slog.Info("Init Vault...")
-		client, err := vaultClient.New(
-			vaultClient.WithAddress("http://127.0.0.1:8200"), // TODO: Read from configuration
-		)
+		client, err := client.NewVaultClient("http://127.0.0.1:8200", true)
 		if err != nil {
 			slog.Error(fmt.Sprintf("error connecting to Vault: %s", err.Error()))
 		}
@@ -34,12 +31,12 @@ It will not unseal the Vault instance after initializing.`,
 		}
 		fmt.Println(config.VaultConfig)
 
-		v, err := customVault.New(client, config.VaultConfig, ctx)
+		v, err := vaultController.New(client, config.VaultConfig)
 		if err != nil {
 			slog.Error(fmt.Sprintf("error creating Vault connect: %s", err.Error()))
 		}
 
-		if err = v.Init(ctx); err != nil {
+		if err = v.Init(); err != nil {
 			slog.Error(fmt.Sprintf("error initializing Vault: %s", err.Error()))
 			os.Exit(1)
 		}

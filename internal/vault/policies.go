@@ -3,11 +3,9 @@ package vault
 import (
 	"fmt"
 	"log/slog"
-
-	"github.com/hashicorp/vault-client-go/schema"
 )
 
-func (v *vaultServer) SyncPolicy() error {
+func (v *vaultController) SyncPolicy() error {
 	managedPolicies, err := initPolicies(v.config.Policies)
 	if err != nil {
 		return fmt.Errorf("error while initialing policies config: %s", err)
@@ -54,13 +52,10 @@ func initPolicies(policiesConfig []policy) ([]policy, error) {
 }
 
 // addManagedPolicies add defined policies to Vault
-func (v *vaultServer) addManagedPolicies(managedPolicies []policy) error {
+func (v *vaultController) addManagedPolicies(managedPolicies []policy) error {
 	for _, policy := range managedPolicies {
 		slog.Info(fmt.Sprintf("adding policy %s", policy.Name))
-		reqSchema := schema.PoliciesWriteAclPolicyRequest{
-			Policy: policy.RulesFormatted,
-		}
-		if _, err := v.cl.System.PoliciesWriteAclPolicy(v.ctx, policy.Name, reqSchema); err != nil {
+		if err := v.cl.Sys().PutPolicy(policy.Name, policy.RulesFormatted); err != nil {
 			return fmt.Errorf("error putting %s policy into vault: %s", policy.Name, err)
 		}
 	}
@@ -69,14 +64,13 @@ func (v *vaultServer) addManagedPolicies(managedPolicies []policy) error {
 }
 
 // getExistingPolicies get all policies that are already in Vault
-func (v *vaultServer) getExistingPolicies() (map[string]bool, error) {
+func (v *vaultController) getExistingPolicies() (map[string]bool, error) {
 	existingPolicies := make(map[string]bool)
 
-	resp, err := v.cl.System.PoliciesListAclPolicies(v.ctx)
+	existingPoliciesList, err := v.cl.Sys().ListPolicies()
 	if err != nil {
 		return nil, fmt.Errorf("unable to list existing policies: %s", err)
 	}
-	existingPoliciesList := resp.Data.Policies
 
 	for _, existingPolicy := range existingPoliciesList {
 		existingPolicies[existingPolicy] = true
@@ -86,7 +80,7 @@ func (v *vaultServer) getExistingPolicies() (map[string]bool, error) {
 }
 
 // getUnanagedPolicies gets unmanaged policies by comparing what's already in Vault and what's in the externalConfig.
-func (v *vaultServer) getUnanagedPolicies(managedPolicies []policy) map[string]bool {
+func (v *vaultController) getUnanagedPolicies(managedPolicies []policy) map[string]bool {
 	policies, _ := v.getExistingPolicies()
 
 	// Vault doesn't allow to remove default or root policies.
@@ -102,7 +96,7 @@ func (v *vaultServer) getUnanagedPolicies(managedPolicies []policy) map[string]b
 }
 
 // removeUnmanagedPolicies remove the unmanaged policies in Vault
-func (v *vaultServer) removeUnmanagedPolicies(managedPolicies []policy) error {
+func (v *vaultController) removeUnmanagedPolicies(managedPolicies []policy) error {
 	// TODO: Check if has configure purge unmanaged config
 	// if !v.config.PurgeUnmanagedConfig.Enabled || v.externalConfig.PurgeUnmanagedConfig.Exclude.Policies {
 	// 	slog.Debug("purge config is disabled, no unmanaged policies will be removed")
@@ -112,7 +106,7 @@ func (v *vaultServer) removeUnmanagedPolicies(managedPolicies []policy) error {
 	unmanagedPolicies := v.getUnanagedPolicies(managedPolicies)
 	for policyName := range unmanagedPolicies {
 		slog.Info(fmt.Sprintf("removing policy %s", policyName))
-		if _, err := v.cl.System.PoliciesDeleteAclPolicy(v.ctx, policyName); err != nil {
+		if err := v.cl.Sys().DeletePolicy(policyName); err != nil {
 			return fmt.Errorf("error deleting %s policy from vault: %s", policyName, err)
 		}
 	}

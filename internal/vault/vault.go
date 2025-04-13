@@ -1,18 +1,16 @@
 package vault
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 
-	vaultClient "github.com/hashicorp/vault-client-go"
-	"github.com/hashicorp/vault-client-go/schema"
+	vaultApi "github.com/hashicorp/vault/api"
 )
 
 type InitConfig struct {
-	KeyShares int32 `mapstructure:"keyShares"`
-	Threshold int32 `mapstructure:"threshold"`
+	KeyShares int `mapstructure:"keyShares"`
+	Threshold int `mapstructure:"threshold"`
 }
 
 type VaultConfig struct {
@@ -20,80 +18,78 @@ type VaultConfig struct {
 	Policies []policy   `mapstructure:"policies"`
 }
 
-type vaultServer struct {
-	ctx    context.Context
-	cl     *vaultClient.Client
+type vaultController struct {
+	cl     *vaultApi.Client
 	config *VaultConfig
 }
 
-// New returns a new implement of Operator interface, or an error
-func New(cl *vaultClient.Client, config VaultConfig, ctx context.Context) (*vaultServer, error) {
-	return &vaultServer{
+// New create a vaultManager to do action with Vault
+func New(cl *vaultApi.Client, config VaultConfig) (*vaultController, error) {
+	return &vaultController{
 		cl:     cl,
 		config: &config,
-		ctx:    ctx,
 	}, nil
 }
 
 // IsSealed determine if Vault is sealed.
-func (v *vaultServer) IsSealed(ctx context.Context) (bool, error) {
-	resp, err := v.cl.System.SealStatus(ctx)
+func (v *vaultController) IsSealed() (bool, error) {
+	resp, err := v.cl.Sys().SealStatus()
 	if err != nil {
 		return false, errors.New("error checking status")
 	}
-	return resp.Data.Sealed, nil
-}
-
-// Unseal the vault instance
-func (v *vaultServer) Unseal() error {
-	return nil
+	return resp.Sealed, nil
 }
 
 // Leader check if instance is Leader.
-func (v *vaultServer) Leader(ctx context.Context) (bool, error) {
-	resp, err := v.cl.System.LeaderStatus(ctx)
+func (v *vaultController) Leader() (bool, error) {
+	resp, err := v.cl.Sys().Leader()
 	if err != nil {
 		return false, errors.New("error checking leader")
 	}
-	return resp.Data.IsSelf, nil
+	return resp.IsSelf, nil
 }
 
 // LeaderAddress check leader address.
-func (v *vaultServer) LeaderAddress(ctx context.Context) (string, error) {
-	resp, err := v.cl.System.LeaderStatus(ctx)
+func (v *vaultController) LeaderAddress() (string, error) {
+	resp, err := v.cl.Sys().Leader()
 	if err != nil {
 		return "", fmt.Errorf("error checking leader, err: %s", err)
 	}
 
-	return resp.Data.LeaderAddress, nil
+	return resp.LeaderAddress, nil
 }
 
-func (v *vaultServer) Init(ctx context.Context) error {
-	isInitializedResp, err := v.cl.System.ReadInitializationStatus(ctx)
+func (v *vaultController) Init() error {
+	isInitialized, err := v.cl.Sys().InitStatus()
 	if err != nil {
 		return fmt.Errorf("error checking vault initialized status: %s", err.Error())
 	}
-	if isInitializedResp.Data["initialized"] == true {
+	if isInitialized {
 		slog.Info("vault is already initialized")
 		return nil
 	}
 
 	slog.Info("initializing vault...")
-	initReq := schema.InitializeRequest{
+	initReq := vaultApi.InitRequest{
 		SecretShares:    v.config.Init.KeyShares,
 		SecretThreshold: v.config.Init.Threshold,
 	}
-	resp, err := v.cl.System.Initialize(ctx, initReq)
+	resp, err := v.cl.Sys().Init(&initReq)
 	if err != nil {
 		return fmt.Errorf("error initializing vault: %s", err.Error())
 	}
 
-	if keys, ok := resp.Data["keys"].([]interface{}); ok {
-		for i, k := range keys {
-			slog.Info(fmt.Sprintf("Unseal key %s: %s", keyUnsealForID(i), k))
-		}
+	for i, k := range resp.Keys {
+		slog.Info(fmt.Sprintf("Unseal key %s: %s", keyUnsealForID(i), k))
 	}
 
+	slog.Info(fmt.Sprintf("Token root: %s", resp.RootToken))
+
+	return nil
+}
+
+// Unseal the vault instance
+func (v *vaultController) Unseal() error {
 	return nil
 }
 

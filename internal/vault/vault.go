@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"runtime"
 
 	vaultApi "github.com/hashicorp/vault/api"
 )
@@ -89,10 +90,40 @@ func (v *vaultController) Init() error {
 }
 
 // Unseal the vault instance
-func (v *vaultController) Unseal() error {
-	return nil
+func (v *vaultController) Unseal(keys []string, addresses []string) error {
+	defer runtime.GC()
+
+	// Infinity loop for unseal Vault
+	for i := 0; ; i++ {
+		slog.Info("Start unsealing Vault...")
+		for _, address := range addresses {
+			slog.Debug(fmt.Sprintf("unsealing instance with address: %s", address))
+
+			keyNum := len(keys)
+			configKeyNum := v.config.Init.Threshold
+			if keyNum != configKeyNum {
+				return fmt.Errorf("number of keys is not equal threshold, %d not equal %d", keyNum, configKeyNum)
+			}
+
+			for _, key := range keys {
+				resp, err := v.cl.Sys().Unseal(string(key))
+				if err != nil {
+					return fmt.Errorf("fail to send unseal request to vault, err: %s", err)
+				}
+
+				if !resp.Sealed {
+					return nil
+				}
+
+				if resp.Progress == 0 {
+					return fmt.Errorf("fail to unseal vault")
+				}
+			}
+		}
+	}
 }
 
+// keyUnsealForID [TODO:description]
 func keyUnsealForID(i int) string {
 	return fmt.Sprintf("vault-unseal-%d", i+1)
 }

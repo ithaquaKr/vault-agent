@@ -11,6 +11,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	cfgSecretShares    = "secret-shares"
+	cfgSecretThreshold = "secret-threshold"
+)
+
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize the target Vault instance",
@@ -44,5 +49,8 @@ It will not unseal the Vault instance after initializing.`,
 }
 
 func init() {
+	configVar(initCmd, cfgSecretShares, 5, "Number of keys that Vault will create during the initialization step.", c)
+	configVar(initCmd, cfgSecretThreshold, 3, "Number of keys required to unseal Vault.", c)
+
 	rootCmd.AddCommand(initCmd)
 }

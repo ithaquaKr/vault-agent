@@ -3,31 +3,31 @@ package vault
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 
 	vaultApi "github.com/hashicorp/vault/api"
 )
 
-type InitConfig struct {
+type VaultInitConfig struct {
 	KeyShares int `mapstructure:"keyShares"`
 	Threshold int `mapstructure:"threshold"`
 }
 
-type VaultConfig struct {
-	Init     InitConfig `mapstructure:"initConfig"`
-	Policies []policy   `mapstructure:"policies"`
+type VaultData struct {
+	Policies []policy `mapstructure:"policies"`
 }
 
 type vaultController struct {
-	cl     *vaultApi.Client
-	config *VaultConfig
+	cl         *vaultApi.Client
+	initConfig *VaultInitConfig
+	data       *VaultData
 }
 
-// New create a vaultManager to do action with Vault
-func New(cl *vaultApi.Client, config VaultConfig) (*vaultController, error) {
+// New create a vaultController to do action with Vault
+func New(cl *vaultApi.Client, initConfig VaultInitConfig, data VaultData) (*vaultController, error) {
 	return &vaultController{
-		cl:     cl,
-		config: &config,
+		cl:         cl,
+		initConfig: &initConfig,
+		data:       &data,
 	}, nil
 }
 
@@ -57,42 +57,4 @@ func (v *vaultController) LeaderAddress() (string, error) {
 	}
 
 	return resp.LeaderAddress, nil
-}
-
-func (v *vaultController) Init() error {
-	isInitialized, err := v.cl.Sys().InitStatus()
-	if err != nil {
-		return fmt.Errorf("error checking vault initialized status: %s", err.Error())
-	}
-	if isInitialized {
-		slog.Info("vault is already initialized")
-		return nil
-	}
-
-	slog.Info("initializing vault...")
-	initReq := vaultApi.InitRequest{
-		SecretShares:    v.config.Init.KeyShares,
-		SecretThreshold: v.config.Init.Threshold,
-	}
-	resp, err := v.cl.Sys().Init(&initReq)
-	if err != nil {
-		return fmt.Errorf("error initializing vault: %s", err.Error())
-	}
-
-	for i, k := range resp.Keys {
-		slog.Info(fmt.Sprintf("Unseal key %s: %s", keyUnsealForID(i), k))
-	}
-
-	slog.Info(fmt.Sprintf("Token root: %s", resp.RootToken))
-
-	return nil
-}
-
-// Unseal the vault instance
-func (v *vaultController) Unseal() error {
-	return nil
-}
-
-func keyUnsealForID(i int) string {
-	return fmt.Sprintf("vault-unseal-%d", i+1)
 }

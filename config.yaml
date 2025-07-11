@@ -1,7 +1,12 @@
-vaultConfig:
-  initConfig:
-    keyShares: 5
-    threshold: 3
+agentConfig:
+  vaultUrl: "127.0.0.1"
+  vaultPort: "8200"
+
+vaultInitConfig:
+  keyShares: 5
+  threshold: 3
+
+vaultData:
   # Allows creating policies in Vault which can be used later on in roles
   # for the Kubernetes based authentication.
   # See https://www.vaultproject.io/docs/concepts/policies.html for more information.

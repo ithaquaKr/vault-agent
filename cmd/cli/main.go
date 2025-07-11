@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/ithaquaKr/vault-agent/pkg/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -19,12 +20,29 @@ const cfgConfigPath = "config-path"
 
 var c = viper.New()
 
+var cfg *config.Config
+
 var rootCmd = &cobra.Command{
 	Use:     "vault-agent-cli",
 	Short:   "Sync configurations, secrets of Hashicorp Vault",
-	Version: Version, // TODO: Implement versioning via another command
+	Version: Version,
 	Long:    "This is a tool to help setup, management of Hashicorp Vault.",
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		configPath := c.GetString(cfgConfigPath)
+		if configPath != "" {
+			c.SetConfigFile(configPath)
+			if err := c.ReadInConfig(); err != nil {
+				return fmt.Errorf("failed to read config file: %w", err)
+			}
+		}
+
+		var err error
+		cfg, err = config.LoadConfig(c)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+
+		return nil
 	},
 }
 
@@ -38,14 +56,18 @@ func execute() {
 	}()
 
 	if err := rootCmd.Execute(); err != nil {
-		slog.Error(fmt.Sprintf("error executing command: %s", err.Error()))
+		slog.Error(err.Error())
 		os.Exit(1)
 	}
 }
 
 func init() {
-	configVar(rootCmd, cfgVaultAddress, "http://127.0.0.1:8200", "The URL of the remote Vault", c)
-	configVar(rootCmd, cfgConfigPath, "", "The configs file path", c)
+	config.BindFlag(rootCmd, cfgVaultAddress, "http://127.0.0.1:8200", "The URL of the remote Vault", c)
+	config.BindFlag(rootCmd, cfgConfigPath, "", "The configs file path", c)
+
+	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(unsealCmd)
+	rootCmd.AddCommand(syncCmd)
 }
 
 func main() {

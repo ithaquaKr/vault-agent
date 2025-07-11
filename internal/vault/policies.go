@@ -3,18 +3,22 @@ package vault
 import (
 	"fmt"
 	"log/slog"
+
+	hclPrinter "github.com/hashicorp/hcl/v2/hclwrite"
+
+	"github.com/ithaquaKr/vault-agent/pkg/config"
 )
 
-func (v *vaultController) SyncPolicy() error {
-	managedPolicies, err := initPolicies(v.config.Policies)
+func (v *vaultManager) SyncPolicy() error {
+	managedPolicies, err := v.initPolicies(v.data.Policies)
 	if err != nil {
-		return fmt.Errorf("error while initialing policies config: %s", err)
+		return fmt.Errorf("error while initialing policies config: %w", err)
 	}
 	if err := v.addManagedPolicies(managedPolicies); err != nil {
-		return fmt.Errorf("error while adding policies: %s", err)
+		return fmt.Errorf("error while adding policies: %w", err)
 	}
 	if err := v.removeUnmanagedPolicies(managedPolicies); err != nil {
-		return fmt.Errorf("error while deleting unmanaged policies: %s", err)
+		return fmt.Errorf("error while deleting unmanaged policies: %w", err)
 	}
 
 	return nil
@@ -26,37 +30,32 @@ type policy struct {
 	RulesFormatted string
 }
 
-func initPolicies(policiesConfig []policy) ([]policy, error) {
-	// 	for index, policy := range policiesConfig {
-	// 		for k, v := range mounts {
-	// 			policy.Rules = strings.ReplaceAll(policy.Rules, fmt.Sprintf("__accessor__%s", strings.TrimRight(k, "/")), v.Accessor)
-	// 		}
-	// 		//
-	// 		// Format HCL polices.
-	// 		rulesFormatted, err := hclPrinter.Format([]byte(policy.Rules))
-	// 		if err != nil {
-	// 			// Check if rules parse (HCL or JSON).
-	// 			if _, err := hcl.Parse(policy.Rules); err != nil {
-	// 				return nil, fmt.Errorf("error parsing %s policy rules: %s", policy.Name, err)
-	// 			}
-	//
-	// 			// Policies are parsable but couldn't be HCL formatted (most likely JSON).
-	// 			rulesFormatted = []byte(policy.Rules)
-	// 			slog.Debug(fmt.Sprintf("error HCL-formatting %s policy rules (ignore if rules are JSON-formatted): %s",
-	// 				policy.Name, err.Error()))
-	// 		}
-	// 		policiesConfig[index].RulesFormatted = string(rulesFormatted)
-	// 	}
-	//
-	return policiesConfig, nil
+func (v *vaultManager) initPolicies(policiesConfig []config.Policy) ([]policy, error) {
+	var p []policy
+	for _, policyConfig := range policiesConfig {
+		// TODO: Templating policies with mounts
+		// for k, v := range mounts {
+		// 	policy.Rules = strings.ReplaceAll(policy.Rules, fmt.Sprintf("__accessor__%s", strings.TrimRight(k, "/")), v.Accessor)
+		// }
+
+		// Format HCL polices.
+		rulesFormatted := hclPrinter.Format([]byte(policyConfig.Rules))
+		p = append(p, policy{
+			Name:           policyConfig.Name,
+			Rules:          policyConfig.Rules,
+			RulesFormatted: string(rulesFormatted),
+		})
+	}
+
+	return p, nil
 }
 
 // addManagedPolicies add defined policies to Vault
-func (v *vaultController) addManagedPolicies(managedPolicies []policy) error {
+func (v *vaultManager) addManagedPolicies(managedPolicies []policy) error {
 	for _, policy := range managedPolicies {
 		slog.Info(fmt.Sprintf("adding policy %s", policy.Name))
 		if err := v.cl.Sys().PutPolicy(policy.Name, policy.RulesFormatted); err != nil {
-			return fmt.Errorf("error putting %s policy into vault: %s", policy.Name, err)
+			return fmt.Errorf("error putting %s policy into vault: %w", policy.Name, err)
 		}
 	}
 
@@ -64,12 +63,12 @@ func (v *vaultController) addManagedPolicies(managedPolicies []policy) error {
 }
 
 // getExistingPolicies get all policies that are already in Vault
-func (v *vaultController) getExistingPolicies() (map[string]bool, error) {
+func (v *vaultManager) getExistingPolicies() (map[string]bool, error) {
 	existingPolicies := make(map[string]bool)
 
 	existingPoliciesList, err := v.cl.Sys().ListPolicies()
 	if err != nil {
-		return nil, fmt.Errorf("unable to list existing policies: %s", err)
+		return nil, fmt.Errorf("unable to list existing policies: %w", err)
 	}
 
 	for _, existingPolicy := range existingPoliciesList {
@@ -80,7 +79,7 @@ func (v *vaultController) getExistingPolicies() (map[string]bool, error) {
 }
 
 // getUnanagedPolicies gets unmanaged policies by comparing what's already in Vault and what's in the externalConfig.
-func (v *vaultController) getUnanagedPolicies(managedPolicies []policy) map[string]bool {
+func (v *vaultManager) getUnanagedPolicies(managedPolicies []policy) map[string]bool {
 	policies, _ := v.getExistingPolicies()
 
 	// Vault doesn't allow to remove default or root policies.
@@ -96,7 +95,7 @@ func (v *vaultController) getUnanagedPolicies(managedPolicies []policy) map[stri
 }
 
 // removeUnmanagedPolicies remove the unmanaged policies in Vault
-func (v *vaultController) removeUnmanagedPolicies(managedPolicies []policy) error {
+func (v *vaultManager) removeUnmanagedPolicies(managedPolicies []policy) error {
 	// TODO: Check if has configure purge unmanaged config
 	// if !v.config.PurgeUnmanagedConfig.Enabled || v.externalConfig.PurgeUnmanagedConfig.Exclude.Policies {
 	// 	slog.Debug("purge config is disabled, no unmanaged policies will be removed")
@@ -107,7 +106,7 @@ func (v *vaultController) removeUnmanagedPolicies(managedPolicies []policy) erro
 	for policyName := range unmanagedPolicies {
 		slog.Info(fmt.Sprintf("removing policy %s", policyName))
 		if err := v.cl.Sys().DeletePolicy(policyName); err != nil {
-			return fmt.Errorf("error deleting %s policy from vault: %s", policyName, err)
+			return fmt.Errorf("error deleting %s policy from vault: %w", policyName, err)
 		}
 	}
 	return nil

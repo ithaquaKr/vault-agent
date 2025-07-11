@@ -3,10 +3,9 @@ package main
 import (
 	"fmt"
 	"log/slog"
-	"os"
 
 	"github.com/ithaquaKr/vault-agent/client"
-	vaultController "github.com/ithaquaKr/vault-agent/internal/vault"
+	vaultManager "github.com/ithaquaKr/vault-agent/internal/vault"
 	"github.com/ithaquaKr/vault-agent/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -24,33 +23,28 @@ run "vault init" against the target Vault instance, before encrypting and
 storing the keys in the given backend.
 
 It will not unseal the Vault instance after initializing.`,
-	Run: func(_ *cobra.Command, _ []string) {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		slog.Info("Init Vault...")
-		client, err := client.NewVaultClient("http://127.0.0.1:8200", true)
-		if err != nil {
-			slog.Error(fmt.Sprintf("error connecting to Vault: %s", err.Error()))
-		}
-		config, err := config.LoadConfig("../../", "config.yaml")
-		if err != nil {
-			slog.Error(fmt.Sprintf("can load configuration: %s", err))
-		}
-		fmt.Println(config.VaultConfig)
 
-		v, err := vaultController.New(client, config.VaultConfig)
+		client, err := client.NewVaultClient(c.GetString(cfgVaultAddress), true)
 		if err != nil {
-			slog.Error(fmt.Sprintf("error creating Vault connect: %s", err.Error()))
+			return fmt.Errorf("error connecting to Vault: %w", err)
+		}
+
+		v, err := vaultManager.New(client, cfg.VaultConfig.InitConfig, cfg.VaultConfig.Data)
+		if err != nil {
+			return fmt.Errorf("error creating Vault connect: %w", err)
 		}
 
 		if err = v.Init(); err != nil {
-			slog.Error(fmt.Sprintf("error initializing Vault: %s", err.Error()))
-			os.Exit(1)
+			return fmt.Errorf("error initializing Vault: %w", err)
 		}
+
+		return nil
 	},
 }
 
 func init() {
-	configVar(initCmd, cfgSecretShares, 5, "Number of keys that Vault will create during the initialization step.", c)
-	configVar(initCmd, cfgSecretThreshold, 3, "Number of keys required to unseal Vault.", c)
-
-	rootCmd.AddCommand(initCmd)
+	config.BindFlag(initCmd, cfgSecretShares, 5, "Number of keys that Vault will create during the initialization step.", c)
+	config.BindFlag(initCmd, cfgSecretThreshold, 3, "Number of keys required to unseal Vault.", c)
 }

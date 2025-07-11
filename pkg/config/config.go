@@ -1,33 +1,60 @@
 package config
 
 import (
-	"github.com/ithaquaKr/vault-agent/internal/vault"
+	"fmt"
+
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-type Config struct {
-	VaultConfig vault.VaultConfig `mapstructure:"vaultConfig"`
+type VaultConfig struct {
+	InitConfig VaultInitConfig `mapstructure:"init"`
+	Data       VaultData       `mapstructure:"data"`
 }
 
-func LoadConfig(path, filename string) (*Config, error) {
-	// Read configurations file
-	v := viper.New()
-	v.SetConfigFile(filename)
-	v.AddConfigPath(path)
-	v.AutomaticEnv()
+type VaultInitConfig struct {
+	KeyShares int `mapstructure:"keyShares"`
+	Threshold int `mapstructure:"threshold"`
+}
 
-	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			return nil, err
-		}
-		return nil, err
-	}
-	// TODO: Templating data, support load configs from environment and add to YAML file.
+type VaultData struct {
+	Policies []Policy `mapstructure:"policies"`
+}
+
+type Policy struct {
+	Name  string `mapstructure:"name"`
+	Rules string `mapstructure:"rules"`
+}
+
+type Config struct {
+	VaultConfig VaultConfig `mapstructure:"vault"`
+}
+
+func LoadConfig(v *viper.Viper) (*Config, error) {
 	var c Config
-	err := v.Unmarshal(&c)
-	if err != nil {
+	if err := v.Unmarshal(&c); err != nil {
 		return nil, err
 	}
 
 	return &c, nil
+}
+
+// BindFlag binds a cobra flag to a viper instance.
+func BindFlag(cmd *cobra.Command, key string, defaultValue interface{}, description string, vp *viper.Viper) error {
+	flags := cmd.PersistentFlags()
+
+	switch v := defaultValue.(type) {
+	case bool:
+		flags.Bool(key, v, description)
+	case int:
+		flags.Int(key, v, description)
+	case string:
+		flags.String(key, v, description)
+	case []string:
+		flags.StringSlice(key, v, description)
+	default:
+		return fmt.Errorf("unsupported flag type for key: %s", key)
+	}
+
+	return vp.BindPFlag(key, flags.Lookup(key))
 }

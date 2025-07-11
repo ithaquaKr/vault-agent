@@ -8,10 +8,10 @@ import (
 )
 
 // Init initializes the vault instance
-func (v *vaultController) Init() error {
+func (v *vaultManager) Init() error {
 	isInitialized, err := v.cl.Sys().InitStatus()
 	if err != nil {
-		return fmt.Errorf("error checking vault initialized status: %s", err.Error())
+		return fmt.Errorf("error checking vault initialized status: %w", err)
 	}
 	if isInitialized {
 		slog.Info("vault is already initialized")
@@ -25,7 +25,7 @@ func (v *vaultController) Init() error {
 	}
 	resp, err := v.cl.Sys().Init(&initReq)
 	if err != nil {
-		return fmt.Errorf("error initializing vault: %s", err.Error())
+		return fmt.Errorf("error initializing vault: %w", err)
 	}
 
 	for i, k := range resp.Keys {
@@ -38,7 +38,7 @@ func (v *vaultController) Init() error {
 }
 
 // Unseal unlocks the vault using the unseal keys.
-func (v *vaultController) Unseal() error {
+func (v *vaultManager) Unseal() error {
 	return nil
 }
 

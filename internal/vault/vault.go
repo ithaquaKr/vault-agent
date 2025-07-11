@@ -5,26 +5,19 @@ import (
 	"fmt"
 
 	vaultApi "github.com/hashicorp/vault/api"
+
+	"github.com/ithaquaKr/vault-agent/pkg/config"
 )
 
-type VaultInitConfig struct {
-	KeyShares int `mapstructure:"keyShares"`
-	Threshold int `mapstructure:"threshold"`
-}
-
-type VaultData struct {
-	Policies []policy `mapstructure:"policies"`
-}
-
-type vaultController struct {
+type vaultManager struct {
 	cl         *vaultApi.Client
-	initConfig *VaultInitConfig
-	data       *VaultData
+	initConfig *config.VaultInitConfig
+	data       *config.VaultData
 }
 
 // New create a vaultController to do action with Vault
-func New(cl *vaultApi.Client, initConfig VaultInitConfig, data VaultData) (*vaultController, error) {
-	return &vaultController{
+func New(cl *vaultApi.Client, initConfig config.VaultInitConfig, data config.VaultData) (*vaultManager, error) {
+	return &vaultManager{
 		cl:         cl,
 		initConfig: &initConfig,
 		data:       &data,
@@ -32,7 +25,7 @@ func New(cl *vaultApi.Client, initConfig VaultInitConfig, data VaultData) (*vaul
 }
 
 // IsSealed determine if Vault is sealed.
-func (v *vaultController) IsSealed() (bool, error) {
+func (v *vaultManager) IsSealed() (bool, error) {
 	resp, err := v.cl.Sys().SealStatus()
 	if err != nil {
 		return false, errors.New("error checking status")
@@ -41,7 +34,7 @@ func (v *vaultController) IsSealed() (bool, error) {
 }
 
 // Leader check if instance is Leader.
-func (v *vaultController) Leader() (bool, error) {
+func (v *vaultManager) Leader() (bool, error) {
 	resp, err := v.cl.Sys().Leader()
 	if err != nil {
 		return false, errors.New("error checking leader")
@@ -50,7 +43,7 @@ func (v *vaultController) Leader() (bool, error) {
 }
 
 // LeaderAddress check leader address.
-func (v *vaultController) LeaderAddress() (string, error) {
+func (v *vaultManager) LeaderAddress() (string, error) {
 	resp, err := v.cl.Sys().Leader()
 	if err != nil {
 		return "", fmt.Errorf("error checking leader, err: %s", err)
